@@ -75,6 +75,9 @@
     <button class="chip on" data-f="all">Alle</button>
     <button class="chip" data-f="s">Stoa</button>
     <button class="chip" data-f="z">Zen</button>
+    <button class="chip" data-f="m">Mut</button>
+    <button class="chip" data-f="g">Gelassenheit</button>
+    <button class="chip" data-f="k">Kreativität</button>
   </div>
   <main class="card" id="card">
     <span class="mark" aria-hidden="true">“</span>
@@ -86,7 +89,6 @@
       <button id="copy">Kopieren</button>
     </div>
   </main>
-  <p class="hint">Tipp: Leertaste oder Pfeil rechts für das nächste Zitat</p>
   <section class="favs" id="favs" hidden>
     <h2>Deine Favoriten</h2>
     <ul id="favList"></ul>
@@ -152,8 +154,35 @@ const QUOTES = [
   ["Jeder Tag ist eine Reise, und die Reise selbst ist das Zuhause.", "Matsuo Bashō", "z"],
   ["Alter Teich – ein Frosch springt hinein, das Geräusch des Wassers.", "Matsuo Bashō", "z"],
   ["Der Dieb ließ es zurück: den Mond am Fenster.", "Ryōkan", "z"],
-  ["Der Schnee schmilzt, und das ganze Dorf ist voller Kinder.", "Kobayashi Issa", "z"]
+  ["Der Schnee schmilzt, und das ganze Dorf ist voller Kinder.", "Kobayashi Issa", "z"],
+
+  // Mut
+  ["Die Feigen sterben viele Tode vor ihrem Tod, der Tapfere kostet den Tod nur einmal.", "William Shakespeare", "a", "m"],
+  ["Dem Mutigen hilft das Glück.", "Vergil", "a", "m"],
+  ["Wer andere besiegt, ist stark. Wer sich selbst besiegt, ist mächtig.", "Laozi", "a", "m"],
+
+  // Gelassenheit
+  ["Nichts ist genug für den, dem genug zu wenig ist.", "Epikur", "a", "g"],
+  ["Bewahre in schwierigen Zeiten einen gleichmütigen Sinn.", "Horaz", "s", "g"],
+  ["Nutze den Tag und vertraue dem nächsten so wenig wie möglich.", "Horaz", "s", "g"],
+  ["Nirgends lebt ein Mensch ruhiger und ungestörter als in seiner eigenen Seele.", "Marc Aurel", "s", "g"],
+
+  // Kreativität
+  ["Die Kunst ist eine Vermittlerin des Unaussprechlichen.", "Johann Wolfgang von Goethe", "a", "k"],
+  ["Der Mensch spielt nur, wo er in voller Bedeutung des Wortes Mensch ist.", "Friedrich Schiller", "a", "k"],
+  ["Kunst gibt nicht das Sichtbare wieder, sie macht sichtbar.", "Paul Klee", "a", "k"],
+  ["Man muss noch Chaos in sich haben, um einen tanzenden Stern gebären zu können.", "Friedrich Nietzsche", "a", "k"],
+  ["Folge nicht den Spuren der Alten, suche, was sie suchten.", "Matsuo Bashō (zugeschrieben)", "z", "k"]
 ];
+// Themen für ältere Zitate (Anfang des Textes -> Thema)
+const TH = {
+  'Man muss das U': 'm', 'Habe Mut, dich': 'm', 'Nicht weil es s': 'm', 'Wer ein Warum z': 'm',
+  'Das Hindernis ': 'm', 'Sieben Mal fal': 'm',
+  'Wir leiden öft': 'g', 'Nicht die Dinge': 'g', 'Verlange nicht,': 'g', 'Zorn ist eine ': 'g',
+  'Manches steht ': 'g', 'Wer weiß, dass ': 'g', 'Eile mit Weile': 'g',
+  'Phantasie ist ': 'k', 'Alter Teich – ': 'k', 'Jeder Tag ist e': 'k'
+};
+const themeOf = q => q[3] || (Object.keys(TH).find(k => q[0].startsWith(k)) ? TH[Object.keys(TH).find(k => q[0].startsWith(k))] : '');
 const STOA = ['Seneca', 'Marc Aurel', 'Epiktet', 'Epiktet (zugeschrieben)', 'Horaz'];
 const catOf = q => q[2] || (STOA.includes(q[1]) ? 's' : 'a');
 let filter = 'all';
@@ -163,7 +192,7 @@ const card = $('card');
 let order = [], pos = -1, current = 0;
 
 function shuffle() {
-  order = QUOTES.map((_, i) => i).filter(i => filter === 'all' || catOf(QUOTES[i]) === filter);
+  order = QUOTES.map((_, i) => i).filter(i => filter === 'all' || catOf(QUOTES[i]) === filter || themeOf(QUOTES[i]) === filter);
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [order[i], order[j]] = [order[j], order[i]];
