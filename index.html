@@ -68,10 +68,25 @@
   .favs ul { list-style: none; margin: 0; padding: 0; }
   .favs li { padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; line-height: 1.45; cursor: pointer; }
   .favs li span { color: var(--muted); display: block; font-size: 13px; margin-top: 2px; }
+
+  .label { color: var(--accent); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 14px; visibility: hidden; }
+  .search { width: 100%; max-width: 640px; }
+  input[type=search], textarea {
+    width: 100%; font: inherit; font-size: 16px; color: var(--ink); background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; outline: none;
+  }
+  input[type=search]:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 64px; margin: 14px 0 10px; }
+  .results { list-style: none; margin: 8px 0 0; padding: 0; }
+  .results li { padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; line-height: 1.45; cursor: pointer; }
+  .results li span { color: var(--muted); display: block; font-size: 13px; margin-top: 2px; }
+  .favs .tools { margin-top: 18px; }
+  .favs .tools p { color: var(--muted); font-size: 13px; margin: 0 0 4px; }
 </style>
 </head>
 <body>
   <div class="row" id="chips">
+    <button class="chip" data-f="daily">Heute</button>
     <button class="chip on" data-f="all">Alle</button>
     <button class="chip" data-f="s">Stoa</button>
     <button class="chip" data-f="z">Zen</button>
@@ -81,17 +96,31 @@
   </div>
   <main class="card" id="card">
     <span class="mark" aria-hidden="true">“</span>
+    <p class="label" id="label">Zitat des Tages</p>
     <p class="quote" id="text" aria-live="polite"></p>
     <p class="author" id="author"></p>
     <div class="actions row">
       <button class="primary" id="next">Nächstes Zitat</button>
       <button id="fav" class="fav" aria-pressed="false">♡ Merken</button>
       <button id="copy">Kopieren</button>
+      <button id="share">Teilen</button>
     </div>
   </main>
-  <section class="favs" id="favs" hidden>
+  <section class="search">
+    <input type="search" id="q" placeholder="Suchen: Stichwort oder Autor" autocomplete="off">
+    <ul class="results" id="results"></ul>
+  </section>
+  <section class="favs" id="favs">
     <h2>Deine Favoriten</h2>
     <ul id="favList"></ul>
+    <div class="tools">
+      <p>Favoriten auf ein anderes Gerät übertragen: Code kopieren, dort einfügen und übernehmen.</p>
+      <textarea id="code" placeholder="Code hier einfügen" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+      <div class="row" style="justify-content:flex-start">
+        <button id="copyCode">Meinen Code kopieren</button>
+        <button id="applyCode">Code übernehmen</button>
+      </div>
+    </div>
   </section>
   <div class="toast" id="toast"></div>
 
@@ -189,28 +218,49 @@ let filter = 'all';
 
 const $ = id => document.getElementById(id);
 const card = $('card');
-let order = [], pos = -1, current = 0;
 
-function shuffle() {
-  order = QUOTES.map((_, i) => i).filter(i => filter === 'all' || catOf(QUOTES[i]) === filter || themeOf(QUOTES[i]) === filter);
-  for (let i = order.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [order[i], order[j]] = [order[j], order[i]];
-  }
-  pos = -1;
+function store(key, def) { try { return JSON.parse(localStorage.getItem(key) || def); } catch (e) { return JSON.parse(def); } }
+function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+
+let favs = store('fav', '[]');
+let seen = store('seen', '[]');
+let order = [], pos = -1, hist = [], hp = -1, current = 0;
+
+// Zitat des Tages: pro Kalendertag (lokale Zeit) fest, für alle Geräte gleich
+const dayNum = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+const daily = (Math.imul(dayNum, 2654435761) >>> 0) % QUOTES.length;
+
+function inFilter(i) {
+  const q = QUOTES[i];
+  return filter === 'all' || catOf(q) === filter || themeOf(q) === filter;
 }
 
-function loadFavs() { try { return JSON.parse(localStorage.getItem('fav') || '[]'); } catch (e) { return []; } }
-function saveFavs(f) { try { localStorage.setItem('fav', JSON.stringify(f)); } catch (e) {} }
-let favs = loadFavs();
+// Gemischte Reihenfolge; bereits gesehene Zitate (auch von früheren Besuchen) kommen zuletzt
+function shuffle() {
+  const pool = QUOTES.map((_, i) => i).filter(inFilter);
+  let fresh = pool.filter(i => !seen.includes(i));
+  if (!fresh.length) {
+    seen = seen.filter(i => !pool.includes(i));
+    save('seen', seen);
+    fresh = pool.filter(i => i !== current);
+    if (!fresh.length) fresh = pool;
+  }
+  for (let i = fresh.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [fresh[i], fresh[j]] = [fresh[j], fresh[i]];
+  }
+  order = fresh; pos = -1;
+}
+function markSeen(i) { if (!seen.includes(i)) { seen.push(i); save('seen', seen); } }
 
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 1600);
+  setTimeout(() => t.classList.remove('show'), 1800);
 }
 
 function render(i) {
   current = i;
+  $('label').style.visibility = i === daily ? 'visible' : 'hidden';
   $('text').textContent = QUOTES[i][0];
   $('author').textContent = '— ' + QUOTES[i][1];
   const on = favs.includes(i);
@@ -219,23 +269,34 @@ function render(i) {
   b.setAttribute('aria-pressed', on);
   b.textContent = on ? '♥ Gemerkt' : '♡ Merken';
 }
-
-function next() {
+function show(i) {
+  card.classList.add('fade');
+  setTimeout(() => { render(i); card.classList.remove('fade'); }, 300);
+}
+function go(i) {
+  hist = hist.slice(0, hp + 1); hist.push(i); hp = hist.length - 1;
+  markSeen(i); show(i);
+}
+function newQuote() {
   pos++;
   if (pos >= order.length) { shuffle(); pos = 0; }
-  card.classList.add('fade');
-  setTimeout(() => { render(order[pos]); card.classList.remove('fade'); }, 300);
+  go(order[pos]);
+}
+function next() {
+  if (hp < hist.length - 1) { hp++; show(hist[hp]); } else newQuote();
+}
+function prev() {
+  if (hp > 0) { hp--; show(hist[hp]); }
 }
 
 function renderFavs() {
   const ul = $('favList'); ul.innerHTML = '';
-  $('favs').hidden = favs.length === 0;
   favs.forEach(i => {
     const li = document.createElement('li');
     li.textContent = QUOTES[i][0];
     const s = document.createElement('span'); s.textContent = QUOTES[i][1];
     li.appendChild(s);
-    li.onclick = () => { render(i); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    li.onclick = () => { go(i); window.scrollTo({ top: 0, behavior: 'smooth' }); };
     ul.appendChild(li);
   });
 }
@@ -243,25 +304,82 @@ function renderFavs() {
 $('next').onclick = next;
 $('fav').onclick = () => {
   favs = favs.includes(current) ? favs.filter(x => x !== current) : [...favs, current];
-  saveFavs(favs); render(current); renderFavs();
+  save('fav', favs); render(current); renderFavs();
 };
+const quoteText = () => `„${QUOTES[current][0]}“ — ${QUOTES[current][1]}`;
 $('copy').onclick = async () => {
-  const txt = `„${QUOTES[current][0]}“ — ${QUOTES[current][1]}`;
-  try { await navigator.clipboard.writeText(txt); toast('Kopiert'); } catch (e) { toast('Kopieren nicht möglich'); }
+  try { await navigator.clipboard.writeText(quoteText()); toast('Kopiert'); } catch (e) { toast('Kopieren nicht möglich'); }
 };
+$('share').onclick = async () => {
+  if (navigator.share) {
+    try { await navigator.share({ text: quoteText() }); } catch (e) {}
+  } else {
+    try { await navigator.clipboard.writeText(quoteText()); toast('Kopiert'); } catch (e) { toast('Teilen nicht möglich'); }
+  }
+};
+
+// Favoriten übertragen
+$('copyCode').onclick = async () => {
+  const c = 'ZF1:' + favs.join('.');
+  $('code').value = c;
+  try { await navigator.clipboard.writeText(c); toast('Code kopiert'); }
+  catch (e) { $('code').select(); toast('Code markieren und kopieren'); }
+};
+$('applyCode').onclick = () => {
+  const m = $('code').value.trim().match(/^ZF1:([\d.]*)$/);
+  if (!m) { toast('Code nicht erkannt'); return; }
+  const ids = m[1].split('.').filter(Boolean).map(Number).filter(n => Number.isInteger(n) && n < QUOTES.length);
+  favs = [...new Set([...favs, ...ids])];
+  save('fav', favs); renderFavs(); render(current);
+  toast(ids.length + ' Favoriten übernommen');
+};
+
+// Suche
+$('q').oninput = () => {
+  const t = $('q').value.trim().toLowerCase();
+  const ul = $('results'); ul.innerHTML = '';
+  if (t.length < 2) return;
+  const hits = QUOTES.map((_, i) => i).filter(i => (QUOTES[i][0] + ' ' + QUOTES[i][1]).toLowerCase().includes(t)).slice(0, 20);
+  if (!hits.length) { const li = document.createElement('li'); li.textContent = 'Nichts gefunden'; ul.appendChild(li); return; }
+  hits.forEach(i => {
+    const li = document.createElement('li');
+    li.textContent = QUOTES[i][0];
+    const s = document.createElement('span'); s.textContent = QUOTES[i][1];
+    li.appendChild(s);
+    li.onclick = () => { go(i); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    ul.appendChild(li);
+  });
+};
+
+// Wischen und Tastatur
+let tx = null, ty = null;
+card.addEventListener('touchstart', e => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+card.addEventListener('touchend', e => {
+  if (tx === null) return;
+  const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+  tx = null;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { dx < 0 ? next() : prev(); }
+}, { passive: true });
 document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   if (e.code === 'Space' || e.code === 'ArrowRight') { e.preventDefault(); next(); }
+  if (e.code === 'ArrowLeft') { e.preventDefault(); prev(); }
 });
 
+// Filter
 document.querySelectorAll('.chip').forEach(c => c.onclick = () => {
+  if (c.dataset.f === 'daily') { go(daily); return; }
   filter = c.dataset.f;
   document.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === c));
-  shuffle(); pos = -1; next();
+  shuffle(); newQuote();
 });
 
+// Start: Zitat des Tages
+hist = [daily]; hp = 0;
+markSeen(daily);
+current = daily;
 shuffle();
-pos = 0;
-render(order[0]);
+render(daily);
 renderFavs();
 </script>
 </body>
