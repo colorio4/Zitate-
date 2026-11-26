@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Zitate">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1b1916">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Weise Zitate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4efe6; --ink: #2a2622; --muted: #8a8078; --accent: #a8553a; --card: #fbf8f2; --line: #e2d9ca;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1b1916; --ink: #ece5d8; --muted: #9a9086; --accent: #d98462; --card: #23201c; --line: #35302a; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 24px 20px; gap: 28px;
+  }
+  .card {
+    width: 100%; max-width: 640px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 18px;
+    padding: 44px 32px 32px; position: relative; text-align: center;
+  }
+  .mark {
+    font-family: 'Cormorant Garamond', Georgia, serif; font-size: 90px; line-height: .6;
+    color: var(--accent); height: 40px; display: block; margin-bottom: 8px;
+  }
+  .quote {
+    font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 500;
+    font-size: clamp(26px, 5.6vw, 38px); line-height: 1.3; margin: 0 0 22px;
+    transition: opacity .35s ease, transform .35s ease; min-height: 3.9em;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .author { color: var(--muted); font-size: 15px; letter-spacing: .04em; transition: opacity .35s ease; margin: 0; }
+  .fade .quote, .fade .author { opacity: 0; }
+  .fade .quote { transform: translateY(6px); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  button {
+    font: inherit; font-size: 15px; cursor: pointer; color: var(--ink);
+    background: transparent; border: 1px solid var(--line); border-radius: 999px;
+    padding: 10px 18px; transition: background .15s, border-color .15s;
+  }
+  button:hover { border-color: var(--accent); }
+  .chip { padding: 7px 16px; font-size: 14px; }
+  .chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; padding: 12px 26px; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.fav.on { color: var(--accent); border-color: var(--accent); }
+  .actions { margin-top: 30px; }
+  .hint { color: var(--muted); font-size: 12.5px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 8px 16px; border-radius: 999px; font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .favs { width: 100%; max-width: 640px; }
+  .favs h2 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; font-weight: 600; margin: 0 0 10px; }
+  .favs ul { list-style: none; margin: 0; padding: 0; }
+  .favs li { padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; line-height: 1.45; cursor: pointer; }
+  .favs li span { color: var(--muted); display: block; font-size: 13px; margin-top: 2px; }
+</style>
+</head>
+<body>
+  <div class="row" id="chips">
+    <button class="chip on" data-f="all">Alle</button>
+    <button class="chip" data-f="s">Stoa</button>
+    <button class="chip" data-f="z">Zen</button>
+  </div>
+  <main class="card" id="card">
+    <span class="mark" aria-hidden="true">“</span>
+    <p class="quote" id="text" aria-live="polite"></p>
+    <p class="author" id="author"></p>
+    <div class="actions row">
+      <button class="primary" id="next">Nächstes Zitat</button>
+      <button id="fav" class="fav" aria-pressed="false">♡ Merken</button>
+      <button id="copy">Kopieren</button>
+    </div>
+  </main>
+  <p class="hint">Tipp: Leertaste oder Pfeil rechts für das nächste Zitat</p>
+  <section class="favs" id="favs" hidden>
+    <h2>Deine Favoriten</h2>
+    <ul id="favList"></ul>
+  </section>
+  <div class="toast" id="toast"></div>
+
+<script>
+const QUOTES = [
+  ["Ich weiß, dass ich nichts weiß.", "Sokrates"],
+  ["Das Leben ist kurz, die Kunst ist lang.", "Hippokrates"],
+  ["Es ist nicht wenig Zeit, die wir haben, sondern viel, die wir nicht nutzen.", "Seneca"],
+  ["Wer nicht weiß, in welchen Hafen er segeln will, für den ist kein Wind der richtige.", "Seneca"],
+  ["Nicht weil es schwer ist, wagen wir es nicht – weil wir es nicht wagen, ist es schwer.", "Seneca"],
+  ["Das Glück deines Lebens hängt von der Beschaffenheit deiner Gedanken ab.", "Marc Aurel"],
+  ["Der Weg von tausend Meilen beginnt mit dem ersten Schritt.", "Laozi"],
+  ["Wer andere kennt, ist klug; wer sich selbst kennt, ist weise.", "Laozi"],
+  ["Wer ein Warum zu leben hat, erträgt fast jedes Wie.", "Friedrich Nietzsche"],
+  ["Habe Mut, dich deines eigenen Verstandes zu bedienen.", "Immanuel Kant"],
+  ["Man muss das Unmögliche versuchen, um das Mögliche zu erreichen.", "Hermann Hesse"],
+  ["Phantasie ist wichtiger als Wissen, denn Wissen ist begrenzt.", "Albert Einstein"],
+  ["Wer fragt, ist für fünf Minuten dumm. Wer nicht fragt, bleibt es ein Leben lang.", "Chinesisches Sprichwort"],
+  ["Eile mit Weile.", "Augustus"],
+  ["Glück ist das Einzige, was sich verdoppelt, wenn man es teilt.", "Albert Schweitzer"],
+  ["Erkenne dich selbst.", "Inschrift im Apollotempel von Delphi"],
+  ["Was man nicht versteht, besitzt man nicht.", "Johann Wolfgang von Goethe"],
+  ["Wer weiß, dass ihm genug ist, der ist reich.", "Laozi"],
+  ["Nichts tun – und doch bleibt nichts ungetan.", "Laozi"],
+
+  // Stoa
+  ["Nicht die Dinge selbst beunruhigen die Menschen, sondern die Meinungen über die Dinge.", "Epiktet"],
+  ["Manches steht in unserer Macht, anderes nicht.", "Epiktet"],
+  ["Verlange nicht, dass geschieht, was du willst. Wolle, was geschieht, und es wird dir gut gehen.", "Epiktet"],
+  ["Sage dir zuerst, wer du sein willst. Dann tue, was du dafür tun musst.", "Epiktet"],
+  ["Kein großes Ding entsteht plötzlich.", "Epiktet"],
+  ["Wir haben zwei Ohren und einen Mund, damit wir doppelt so viel hören wie sprechen.", "Epiktet (zugeschrieben)"],
+  ["Wir leiden öfter in der Vorstellung als in der Wirklichkeit.", "Seneca"],
+  ["Das Leben ist lang genug, wenn man es zu nutzen weiß.", "Seneca"],
+  ["Man lernt sein Leben lang – und, was noch erstaunlicher ist, man lernt sein Leben lang zu leben.", "Seneca"],
+  ["Arm ist nicht, wer wenig hat, sondern wer viel begehrt.", "Seneca"],
+  ["Beginne sofort zu leben und zähle jeden Tag als ein eigenes Leben.", "Seneca"],
+  ["Wie der Körper durch Arbeit, so wird der Geist durch Mühen gestärkt.", "Seneca"],
+  ["Unglücklich nenne ich den, dem nie etwas Widriges begegnet ist.", "Seneca"],
+  ["Zorn ist eine kurze Raserei.", "Horaz"],
+  ["Das Hindernis auf dem Weg wird zum Weg.", "Marc Aurel"],
+  ["Lebe nicht, als hättest du noch zehntausend Jahre.", "Marc Aurel"],
+  ["Verschwende keine Zeit mehr damit zu diskutieren, was ein guter Mensch sein soll. Sei einer.", "Marc Aurel"],
+  ["Die beste Rache ist, nicht so zu werden wie der, der dir Unrecht tat.", "Marc Aurel"],
+  ["Wenn dich etwas Äußeres schmerzt, stört dich nicht die Sache, sondern dein Urteil darüber.", "Marc Aurel"],
+  ["Was dem Schwarm nicht nützt, nützt auch der Biene nicht.", "Marc Aurel"],
+  ["Unser Leben ist das, wozu unser Denken es macht.", "Marc Aurel"],
+
+  // Zen
+  ["Den Weg zu lernen heißt, sich selbst zu lernen. Sich selbst zu lernen heißt, sich selbst zu vergessen.", "Dōgen", "z"],
+  ["Der große Weg ist nicht schwer für den, der nicht wählt.", "Sengcan", "z"],
+  ["Nicht wissen ist das Allernächste.", "Dizang", "z"],
+  ["Ein Tag ohne Arbeit ist ein Tag ohne Essen.", "Baizhang", "z"],
+  ["Wenn du sitzt, dann sitze. Wenn du gehst, dann gehe. Vor allem: Zögere nicht.", "Ummon", "z"],
+  ["Vor der Erleuchtung: Holz hacken, Wasser tragen. Nach der Erleuchtung: Holz hacken, Wasser tragen.", "Zen-Weisheit", "z"],
+  ["Der Finger, der zum Mond zeigt, ist nicht der Mond.", "Zen-Weisheit", "z"],
+  ["Eine volle Tasse kann nichts mehr aufnehmen.", "Zen-Geschichte vom Tee", "z"],
+  ["Sieben Mal fallen, acht Mal aufstehen.", "Japanisches Sprichwort", "z"],
+  ["Sitze still und tue nichts: Der Frühling kommt, und das Gras wächst von selbst.", "Zenrin Kushū", "z"],
+  ["Jeder Tag ist eine Reise, und die Reise selbst ist das Zuhause.", "Matsuo Bashō", "z"],
+  ["Alter Teich – ein Frosch springt hinein, das Geräusch des Wassers.", "Matsuo Bashō", "z"],
+  ["Der Dieb ließ es zurück: den Mond am Fenster.", "Ryōkan", "z"],
+  ["Der Schnee schmilzt, und das ganze Dorf ist voller Kinder.", "Kobayashi Issa", "z"]
+];
+const STOA = ['Seneca', 'Marc Aurel', 'Epiktet', 'Epiktet (zugeschrieben)', 'Horaz'];
+const catOf = q => q[2] || (STOA.includes(q[1]) ? 's' : 'a');
+let filter = 'all';
+
+const $ = id => document.getElementById(id);
+const card = $('card');
+let order = [], pos = -1, current = 0;
+
+function shuffle() {
+  order = QUOTES.map((_, i) => i).filter(i => filter === 'all' || catOf(QUOTES[i]) === filter);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  pos = -1;
+}
+
+function loadFavs() { try { return JSON.parse(localStorage.getItem('fav') || '[]'); } catch (e) { return []; } }
+function saveFavs(f) { try { localStorage.setItem('fav', JSON.stringify(f)); } catch (e) {} }
+let favs = loadFavs();
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+function render(i) {
+  current = i;
+  $('text').textContent = QUOTES[i][0];
+  $('author').textContent = '— ' + QUOTES[i][1];
+  const on = favs.includes(i);
+  const b = $('fav');
+  b.classList.toggle('on', on);
+  b.setAttribute('aria-pressed', on);
+  b.textContent = on ? '♥ Gemerkt' : '♡ Merken';
+}
+
+function next() {
+  pos++;
+  if (pos >= order.length) { shuffle(); pos = 0; }
+  card.classList.add('fade');
+  setTimeout(() => { render(order[pos]); card.classList.remove('fade'); }, 300);
+}
+
+function renderFavs() {
+  const ul = $('favList'); ul.innerHTML = '';
+  $('favs').hidden = favs.length === 0;
+  favs.forEach(i => {
+    const li = document.createElement('li');
+    li.textContent = QUOTES[i][0];
+    const s = document.createElement('span'); s.textContent = QUOTES[i][1];
+    li.appendChild(s);
+    li.onclick = () => { render(i); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    ul.appendChild(li);
+  });
+}
+
+$('next').onclick = next;
+$('fav').onclick = () => {
+  favs = favs.includes(current) ? favs.filter(x => x !== current) : [...favs, current];
+  saveFavs(favs); render(current); renderFavs();
+};
+$('copy').onclick = async () => {
+  const txt = `„${QUOTES[current][0]}“ — ${QUOTES[current][1]}`;
+  try { await navigator.clipboard.writeText(txt); toast('Kopiert'); } catch (e) { toast('Kopieren nicht möglich'); }
+};
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowRight') { e.preventDefault(); next(); }
+});
+
+document.querySelectorAll('.chip').forEach(c => c.onclick = () => {
+  filter = c.dataset.f;
+  document.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === c));
+  shuffle(); pos = -1; next();
+});
+
+shuffle();
+pos = 0;
+render(order[0]);
+renderFavs();
+</script>
+</body>
+</html>
